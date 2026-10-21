@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenWA — teste com Gemini</title>
+<style>
+  *{box-sizing:border-box}body{margin:36px auto;padding:0 24px;max-width:760px;background:#f8faf8;color:#18291e;font:17px/1.5 system-ui}
+  h1{font-size:28px;letter-spacing:-.6px;margin-bottom:8px}h2{font-size:19px;margin-top:28px}label{display:block;margin-bottom:6px}
+  input{width:100%;font:inherit;padding:11px;border:1px solid #85988b;border-radius:6px;background:white}button{font:inherit;padding:11px 16px;border:0;border-radius:6px;background:#1e5936;color:white;cursor:pointer;margin:12px 8px 0 0}
+  button:disabled{opacity:.5;cursor:default}button.secondary{background:#e0e9e2;color:#18291e}blockquote{margin:16px 0;padding:14px 18px;background:#e9f0eb;border-left:3px solid #33784a}
+  small{display:block;color:#526457}table{width:100%;border-collapse:collapse;font-size:15px}th,td{text-align:left;padding:9px 6px;border-bottom:1px solid #d7e0d9}
+  #notice{padding:12px 0;font-weight:600}#error{color:#a22626;white-space:pre-wrap}.confirm{display:flex;gap:10px;align-items:start}.confirm input{width:auto;margin-top:7px}footer{margin:28px 0;font-size:14px;color:#526457}
+  #qr{width:min(100%,360px);height:auto;background:white} [hidden]{display:none!important}
+</style>
+<h1>Vendedor virtual — site para pet shop</h1>
+<p id="notice" role="status">Carregando o estado do teste…</p><p id="error" role="alert"></p>
+<p id="connection" role="status"></p>
+<section id="pairing" hidden><h2>Reconectar o WhatsApp</h2><img id="qr" alt="QR Code para reconectar o WhatsApp"><p>No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho. O QR se atualiza nesta página.</p></section>
+<h2>1. Conectar o Gemini</h2>
+<form id="configure"><label for="key">Chave da API Gemini</label><input id="key" type="password" autocomplete="off" required minlength="16" maxlength="512">
+<small>A chave fica apenas na memória deste processo. Não é gravada no projeto nem enviada aos contatos.</small>
+<button id="validate" type="submit">Validar chave e preparar IA</button></form>
+<h2>2. Revisar e enviar o convite</h2>
+<blockquote id="intro"></blockquote>
+<table><thead><tr><th>Contato</th><th>Convite</th><th>Confirmou “oi”</th><th>Tentativas de resposta</th></tr></thead><tbody id="contacts"></tbody></table>
+<label class="confirm"><input id="confirm" type="checkbox"><span>Conferi o contato e autorizo enviar exatamente o convite acima.</span></label>
+<button id="invite" disabled>Enviar convite</button><button id="stop" class="secondary">Pausar IA</button>
+<p>Roteiro: entender a necessidade do pet shop, sugerir o escopo do site e preparar um resumo para orçamento. Valores e prazos dependem do responsável comercial.</p>
+<footer>Modelo: <span id="model"></span>. Até 12 tentativas por contato. Memória das últimas seis interações somente neste processo, apagada ao encerrar a participação ou reiniciar. A IA só responde após o participante digitar “oi”. “Parar” encerra a participação. O plano gratuito pode usar as mensagens para melhorar produtos Google: use somente dados fictícios.</footer>
+<script>
+let state,working=false;
+const $=id=>document.getElementById(id);
+async function refresh(){try{state=await fetch('/state',{cache:'no-store'}).then(r=>r.json());$('notice').textContent=state.notice;$('intro').textContent=state.intro;$('model').textContent=state.model;
+const connection=await fetch('/connection',{cache:'no-store'}).then(r=>r.json());$('connection').textContent=connection.status==='ready'?'WhatsApp conectado.':connection.status==='qr_ready'?'Escaneie o QR para liberar o envio.':'WhatsApp: '+(connection.status||'verificando conexão');
+const qr=connection.status==='qr_ready'&&typeof connection.qrCode==='string'&&connection.qrCode.startsWith('data:image/png;base64,');$('pairing').hidden=!qr;if(qr)$('qr').src=connection.qrCode;else $('qr').removeAttribute('src');
+$('contacts').replaceChildren(...state.contacts.map(c=>{const tr=document.createElement('tr');for(const text of ['Final '+c.ending,c.invited?'Enviado':c.claimed?'Verificar resultado':'Pendente',c.stopped?'Encerrado':c.consented?'Sim':'Não',String(c.replies)]){const td=document.createElement('td');td.textContent=text;tr.append(td)}return tr}));
+$('invite').disabled=working||state.sending||!state.configured||!state.connected||!state.active||!$('confirm').checked||state.contacts.every(c=>c.claimed);$('validate').disabled=working;
+}catch{$('notice').textContent='Servidor local indisponível.';$('invite').disabled=true;}}
+async function action(route,body){working=true;$('error').textContent='';await refresh();try{const r=await fetch(route,{method:'POST',headers:{'Content-Type':'application/json','X-Study-CSRF':state.csrf},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error)}catch(e){$('error').textContent=e.message}finally{working=false;await refresh()}}
+$('configure').onsubmit=async e=>{e.preventDefault();const key=$('key').value.trim();$('key').value='';await action('/configure',{key});};$('invite').onclick=()=>action('/invite',{confirm:$('confirm').checked});$('stop').onclick=()=>action('/stop',{});$('confirm').onchange=refresh;refresh();setInterval(refresh,3000);
+</script>
+</html>

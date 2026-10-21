@@ -254,7 +254,26 @@ async function bootstrap() {
   );
 
   const port = process.env.PORT || 2785;
-  await app.listen(port);
+  if (process.env.BIND_HOST) {
+    await app.listen(port, process.env.BIND_HOST);
+  } else {
+    await app.listen(port);
+  }
+
+  if (process.env.STUDY_UI_ENABLED === 'true') {
+    const { startStudyServer } = require('../scripts/estudo-ai-server.cjs');
+    const auth = app.get(AuthService);
+    const sessions = app.get(require('./modules/session/session.service').SessionService);
+    const contacts = app.get(require('./modules/contact/contact.service').ContactService);
+    await startStudyServer({
+      createKey: (dto: Parameters<AuthService['createApiKey']>[0]) => auth.createApiKey(dto),
+      updateKey: (id: string, dto: Parameters<AuthService['update']>[1]) => auth.update(id, dto),
+      startSession: (id: string) => sessions.start(id, { explicit: true }),
+      checkNumber: (id: string, phone: string) => contacts.getNumberId(id, phone),
+      getQr: (id: string) => sessions.getQRCode(id),
+      shutdown: () => app.close(),
+    });
+  }
 
   // Advertise the configured public URL, matching the AuthService banner (auth.service.ts). A bare
   // `localhost` literal here contradicted that banner and read as "the UI is pinned to localhost",
